@@ -439,6 +439,6 @@ If you have questions about contributing, please:
 
 1. Check existing issues and discussions
 2. Open a new discussion in GitHub Discussions
-3. Reach out via email: research@your-domain.com
+
 
 Thank you for helping advance automotive AI research! 🚗🤖
