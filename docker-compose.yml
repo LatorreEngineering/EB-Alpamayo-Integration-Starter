@@ -1,0 +1,184 @@
+version: '3.8'
+
+services:
+  # Main development environment with Jupyter Lab
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: eb-alpamayo:dev
+    container_name: eb-alpamayo-jupyter
+    
+    # GPU configuration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+    # Port mappings
+    ports:
+      - "8888:8888"  # Jupyter Lab
+    
+    # Volume mounts
+    volumes:
+      - ./:/workspace
+      - ./data:/workspace/data
+      - ./logs:/workspace/logs
+      - huggingface_cache:/home/alpamayo/.cache/huggingface
+    
+    # Environment variables
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - TRANSFORMERS_CACHE=/home/alpamayo/.cache/huggingface
+      - HF_HOME=/home/alpamayo/.cache/huggingface
+      - JUPYTER_ENABLE_LAB=yes
+      - PYTHONPATH=/workspace
+    
+    # Keep container running
+    stdin_open: true
+    tty: true
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Networks
+    networks:
+      - alpamayo-net
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Standalone inference service
+  inference:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: eb-alpamayo:prod
+    container_name: eb-alpamayo-inference
+    
+    # GPU configuration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+    # Volume mounts
+    volumes:
+      - ./src:/app/src
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - huggingface_cache:/home/alpamayo/.cache/huggingface
+    
+    # Environment variables
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - TRANSFORMERS_CACHE=/home/alpamayo/.cache/huggingface
+      - HF_HOME=/home/alpamayo/.cache/huggingface
+    
+    # Command override (example: run a specific script)
+    # command: python -m src.alpamayo_wrapper
+    
+    # Networks
+    networks:
+      - alpamayo-net
+    
+    # Only start on-demand
+    profiles:
+      - inference
+
+  # Optional: AlpaSim simulator service (if running headless simulations)
+  alpasim:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    image: eb-alpamayo:dev
+    container_name: eb-alpamayo-alpasim
+    
+    # GPU configuration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    
+    # Volume mounts
+    volumes:
+      - ./:/workspace
+      - ./simulation_outputs:/workspace/simulation_outputs
+      - huggingface_cache:/home/alpamayo/.cache/huggingface
+    
+    # Environment variables
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - DISPLAY=${DISPLAY:-:0}  # For visualization if X11 forwarding
+      - PYTHONPATH=/workspace
+    
+    # Command: Run simulation script
+    command: python -c "print('AlpaSim service ready')"
+    
+    # Networks
+    networks:
+      - alpamayo-net
+    
+    # Only start on-demand
+    profiles:
+      - simulation
+
+# Named volumes for persistent data
+volumes:
+  huggingface_cache:
+    driver: local
+    name: eb_alpamayo_hf_cache
+
+# Custom network
+networks:
+  alpamayo-net:
+    driver: bridge
+    name: alpamayo-network
+
+# ==============================================================================
+# Usage Instructions:
+# ==============================================================================
+#
+# Start Jupyter Lab only (default):
+#   docker-compose up -d
+#   Access: http://localhost:8888
+#
+# Start all services including inference:
+#   docker-compose --profile inference up -d
+#
+# Start with simulation:
+#   docker-compose --profile simulation up -d
+#
+# View logs:
+#   docker-compose logs -f jupyter
+#
+# Execute command in running container:
+#   docker-compose exec jupyter bash
+#
+# Stop all services:
+#   docker-compose down
+#
+# Stop and remove volumes:
+#   docker-compose down -v
+#
+# Rebuild images:
+#   docker-compose build --no-cache
+#
+# ==============================================================================
